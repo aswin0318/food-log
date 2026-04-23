@@ -15,8 +15,11 @@ export function AuthProvider({ children }) {
       setUser(userData)
       const targetData = await macroApi.getTargets()
       setTargets(targetData)
-    } catch {
-      logout()
+    } catch (err) {
+      console.error("Auth fetch failed:", err)
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        logout()
+      }
     } finally {
       setLoading(false)
     }
