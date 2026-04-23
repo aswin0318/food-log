@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: food-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: food-service
+    app.kubernetes.io/name: food-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nutritrack
+spec:
+  replicas: {{ .Values.foodService.replicas }}
+  selector:
+    matchLabels:
+      app: food-service
+  template:
+    metadata:
+      labels:
+        app: food-service
+        app.kubernetes.io/name: food-service
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: food-service
+          image: "{{ .Values.foodService.image.repository }}:{{ .Values.foodService.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.foodService.port }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: food-service-config
+            - secretRef:
+                name: food-service-secret
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          readinessProbe:
+            httpGet:
+              path: /api/food/health
+              port: {{ .Values.foodService.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/food/health
+              port: {{ .Values.foodService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30

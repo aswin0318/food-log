@@ -1,0 +1,107 @@
+# =============================================================================
+# Global Helm Values — NutriTrack Diet & Macro Compliance Tracker
+# =============================================================================
+# Single values.yaml for the entire stack.
+# Secrets are in separate secret.yaml files (plain K8s, convert to SealedSecrets later).
+# =============================================================================
+
+global:
+  namespace: nutritrack-dev
+  corsOrigins: "http://localhost:3000"
+
+# ── PostgreSQL ───────────────────────────────────────────────────────────────
+
+postgresql:
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  port: 5432
+  storage:
+    size: "10Gi"
+    storageClass: ""
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+  # DB users created by the init job
+  dbUsers:
+    - username: auth_user
+      passwordKey: AUTH_USER_PASSWORD
+      database: auth_db
+    - username: food_user
+      passwordKey: FOOD_USER_PASSWORD
+      database: food_db
+    - username: macro_user
+      passwordKey: MACRO_USER_PASSWORD
+      database: macro_db
+    - username: compliance_user
+      passwordKey: COMPLIANCE_USER_PASSWORD
+      database: compliance_db
+
+# ── Auth Service ─────────────────────────────────────────────────────────────
+
+authService:
+  image:
+    repository: food-log/auth-service
+    tag: latest
+  replicas: 1
+  port: 8000
+  database: auth_db
+
+# ── Food Service ─────────────────────────────────────────────────────────────
+
+foodService:
+  image:
+    repository: food-log/food-service
+    tag: latest
+  replicas: 1
+  port: 8001
+  database: food_db
+
+# ── Macro Service ────────────────────────────────────────────────────────────
+
+macroService:
+  image:
+    repository: food-log/macro-service
+    tag: latest
+  replicas: 1
+  port: 8002
+  database: macro_db
+
+# ── Compliance Service ───────────────────────────────────────────────────────
+
+complianceService:
+  image:
+    repository: food-log/compliance-service
+    tag: latest
+  replicas: 1
+  port: 8003
+  database: compliance_db
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+
+frontend:
+  image:
+    repository: food-log/frontend
+    tag: latest
+  replicas: 2
+  port: 3000
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+# ── Global Resources (default for all backend services) ──────────────────────
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"

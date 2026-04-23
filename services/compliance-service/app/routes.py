@@ -1,0 +1,424 @@
+from datetime import date, timedelta
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import get_settings
+from app.database import get_db
+from app.middleware import get_current_user
+from app.models import Alert, ComplianceCheck
+from app.schemas import (
+    AlertListResponse,
+    AlertResponse,
+    ComplianceCheckResponse,
+    MessageResponse,
+    PatternAnalysisResponse,
+)
+
+settings = get_settings()
+router = APIRouter(prefix="/api/compliance", tags=["Compliance & Alerts"])
+
+
+def _get_auth_header(request: Request) -> dict:
+    """Extract authorization header from the incoming request to forward."""
+    auth = request.headers.get("authorization", "")
+    headers = {}
+    if auth:
+        headers["Authorization"] = auth
+    return headers
+
+
+async def _fetch_comparison(target_date: date, request: Request) -> dict:
+    """Fetch daily comparison from macro service."""
+    headers = _get_auth_header(request)
+    cookie_token = request.cookies.get("access_token")
+    cookies = {"access_token": cookie_token} if cookie_token else {}
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{settings.MACRO_SERVICE_URL}/api/macro/comparison/{target_date.isoformat()}",
+            headers=headers,
+            cookies=cookies,
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
+            raise HTTPException(
+                status_code=resp.status_code,
+                detail=f"Macro service error: {resp.text}",
+            )
+        return resp.json()
+
+
+def _generate_alerts(
+    user_id, target_date: date, comparison: dict
+) -> list[Alert]:
+    """Generate alerts based on compliance check results."""
+    alerts = []
+
+    # Protein deficiency
+    if comparison.get("protein_status") == "deficient":
+        pct = comparison.get("protein_percentage", 0)
+        alerts.append(Alert(
+            user_id=user_id,
+            alert_type="protein_deficiency",
+            severity="warning" if pct >= 60 else "critical",
+            title="Protein Deficiency Detected",
+            message=(
+                f"Your protein intake on {target_date.isoformat()} was only "
+                f"{pct}% of your target. Consider adding protein-rich foods "
+                f"like chicken, fish, eggs, or legumes."
+            ),
+            date=target_date,
+            metadata_json={
+                "actual_percentage": pct,
+                "threshold": settings.PROTEIN_DEFICIENCY_PCT,
+                "macro_type": "protein",
+            },
+        ))
+
+    # Calorie surplus
+    if comparison.get("calorie_status") == "surplus":
+        pct = comparison.get("calorie_percentage", 0)
+        alerts.append(Alert(
+            user_id=user_id,
+            alert_type="calorie_surplus",
+            severity="warning" if pct <= 140 else "critical",
+            title="Calorie Surplus Alert",
+            message=(
+                f"Your calorie intake on {target_date.isoformat()} was "
+                f"{pct}% of your target — a surplus of {round(pct - 100, 1)}%. "
+                f"Consider reducing portion sizes or avoiding high-calorie snacks."
+            ),
+            date=target_date,
+            metadata_json={
+                "actual_percentage": pct,
+                "threshold": settings.CALORIE_SURPLUS_PCT,
+                "macro_type": "calories",
+            },
+        ))
+
+    # Calorie deficit
+    if comparison.get("calorie_status") == "deficit":
+        pct = comparison.get("calorie_percentage", 0)
+        alerts.append(Alert(
+            user_id=user_id,
+            alert_type="calorie_deficit",
+            severity="warning" if pct >= 50 else "critical",
+            title="Calorie Deficit Warning",
+            message=(
+                f"Your calorie intake on {target_date.isoformat()} was only "
+                f"{pct}% of your target. You may not be eating enough to "
+                f"sustain your activity level."
+            ),
+            date=target_date,
+            metadata_json={
+                "actual_percentage": pct,
+                "threshold": settings.CALORIE_DEFICIT_PCT,
+                "macro_type": "calories",
+            },
+        ))
+
+    return alerts
+
+
+@router.get("/check/{target_date}", response_model=ComplianceCheckResponse)
+async def check_compliance(
+    target_date: date,
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run a compliance check for a specific date."""
+    comparison = await _fetch_comparison(target_date, request)
+
+    protein_status = comparison.get("protein_status", "ok")
+    calorie_status = comparison.get("calorie_status", "ok")
+    carbs_status = comparison.get("carbs_status", "ok")
+    fat_status = comparison.get("fat_status", "ok")
+
+    overall_compliant = all(
+        s == "ok" for s in [protein_status, calorie_status, carbs_status, fat_status]
+    )
+
+    # Upsert compliance check
+    existing = await db.execute(
+        select(ComplianceCheck).where(
+            and_(
+                ComplianceCheck.user_id == current_user["user_id"],
+                ComplianceCheck.date == target_date,
+            )
+        )
+    )
+    check = existing.scalar_one_or_none()
+
+    if check:
+        check.protein_status = protein_status
+        check.calorie_status = calorie_status
+        check.carbs_status = carbs_status
+        check.fat_status = fat_status
+        check.overall_compliant = overall_compliant
+        check.details = comparison
+    else:
+        check = ComplianceCheck(
+            user_id=current_user["user_id"],
+            date=target_date,
+            protein_status=protein_status,
+            calorie_status=calorie_status,
+            carbs_status=carbs_status,
+            fat_status=fat_status,
+            overall_compliant=overall_compliant,
+            details=comparison,
+        )
+        db.add(check)
+
+    # Generate alerts for non-compliant items
+    if not overall_compliant:
+        new_alerts = _generate_alerts(
+            current_user["user_id"], target_date, comparison
+        )
+        for alert in new_alerts:
+            db.add(alert)
+
+    await db.flush()
+    await db.refresh(check)
+
+    return ComplianceCheckResponse.model_validate(check)
+
+
+@router.get("/alerts", response_model=AlertListResponse)
+async def get_alerts(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all alerts for the current user."""
+    base_query = select(Alert).where(Alert.user_id == current_user["user_id"])
+
+    # Count total
+    count_result = await db.execute(
+        select(func.count()).select_from(base_query.subquery())
+    )
+    total = count_result.scalar() or 0
+
+    # Count unread
+    unread_result = await db.execute(
+        select(func.count()).where(
+            and_(
+                Alert.user_id == current_user["user_id"],
+                Alert.is_read == False,
+            )
+        )
+    )
+    unread_count = unread_result.scalar() or 0
+
+    # Fetch paginated
+    result = await db.execute(
+        base_query.order_by(Alert.created_at.desc()).limit(limit).offset(offset)
+    )
+    alerts = result.scalars().all()
+
+    return AlertListResponse(
+        alerts=[AlertResponse.model_validate(a) for a in alerts],
+        total=total,
+        unread_count=unread_count,
+    )
+
+
+@router.get("/alerts/unread", response_model=AlertListResponse)
+async def get_unread_alerts(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get unread alerts for the current user."""
+    result = await db.execute(
+        select(Alert).where(
+            and_(
+                Alert.user_id == current_user["user_id"],
+                Alert.is_read == False,
+            )
+        ).order_by(Alert.created_at.desc())
+    )
+    alerts = result.scalars().all()
+
+    return AlertListResponse(
+        alerts=[AlertResponse.model_validate(a) for a in alerts],
+        total=len(alerts),
+        unread_count=len(alerts),
+    )
+
+
+@router.put("/alerts/{alert_id}/read", response_model=AlertResponse)
+async def mark_alert_read(
+    alert_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an alert as read."""
+    from uuid import UUID as PyUUID
+    try:
+        parsed_id = PyUUID(alert_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid alert ID")
+
+    result = await db.execute(
+        select(Alert).where(
+            and_(
+                Alert.id == parsed_id,
+                Alert.user_id == current_user["user_id"],
+            )
+        )
+    )
+    alert = result.scalar_one_or_none()
+
+    if not alert:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Alert not found",
+        )
+
+    alert.is_read = True
+    await db.flush()
+    await db.refresh(alert)
+
+    return AlertResponse.model_validate(alert)
+
+
+@router.post("/analyze", response_model=PatternAnalysisResponse)
+async def analyze_patterns(
+    days: int = Query(7, ge=3, le=30),
+    request: Request = None,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Analyze multi-day patterns for compliance issues."""
+    from datetime import date as date_type
+    today = date_type.today()
+    patterns_found = []
+    alerts_generated = 0
+
+    # Fetch comparison data for each day
+    daily_results = []
+    for i in range(days):
+        day = today - timedelta(days=i)
+        try:
+            comparison = await _fetch_comparison(day, request)
+            daily_results.append({"date": day, "data": comparison})
+        except HTTPException:
+            daily_results.append({"date": day, "data": None})
+
+    # Detect consecutive protein deficiency
+    consecutive_protein = 0
+    for result in daily_results:
+        if result["data"] and result["data"].get("protein_status") == "deficient":
+            consecutive_protein += 1
+        else:
+            if consecutive_protein >= settings.PATTERN_DAYS:
+                patterns_found.append({
+                    "type": "consecutive_protein_deficiency",
+                    "days": consecutive_protein,
+                    "severity": "critical",
+                    "message": (
+                        f"Protein deficiency detected for {consecutive_protein} "
+                        f"consecutive days. This may impact muscle health."
+                    ),
+                })
+            consecutive_protein = 0
+
+    if consecutive_protein >= settings.PATTERN_DAYS:
+        patterns_found.append({
+            "type": "consecutive_protein_deficiency",
+            "days": consecutive_protein,
+            "severity": "critical",
+            "message": (
+                f"Protein deficiency detected for {consecutive_protein} "
+                f"consecutive days. This may impact muscle health."
+            ),
+        })
+
+    # Detect consecutive calorie surplus
+    consecutive_surplus = 0
+    for result in daily_results:
+        if result["data"] and result["data"].get("calorie_status") == "surplus":
+            consecutive_surplus += 1
+        else:
+            if consecutive_surplus >= settings.PATTERN_DAYS:
+                patterns_found.append({
+                    "type": "consecutive_calorie_surplus",
+                    "days": consecutive_surplus,
+                    "severity": "warning",
+                    "message": (
+                        f"Calorie surplus detected for {consecutive_surplus} "
+                        f"consecutive days. Consider adjusting intake."
+                    ),
+                })
+            consecutive_surplus = 0
+
+    if consecutive_surplus >= settings.PATTERN_DAYS:
+        patterns_found.append({
+            "type": "consecutive_calorie_surplus",
+            "days": consecutive_surplus,
+            "severity": "warning",
+            "message": (
+                f"Calorie surplus detected for {consecutive_surplus} "
+                f"consecutive days. Consider adjusting intake."
+            ),
+        })
+
+    # Detect consecutive calorie deficit
+    consecutive_deficit = 0
+    for result in daily_results:
+        if result["data"] and result["data"].get("calorie_status") == "deficit":
+            consecutive_deficit += 1
+        else:
+            if consecutive_deficit >= settings.PATTERN_DAYS:
+                patterns_found.append({
+                    "type": "consecutive_calorie_deficit",
+                    "days": consecutive_deficit,
+                    "severity": "critical",
+                    "message": (
+                        f"Calorie deficit detected for {consecutive_deficit} "
+                        f"consecutive days. This may be unsafe."
+                    ),
+                })
+            consecutive_deficit = 0
+
+    if consecutive_deficit >= settings.PATTERN_DAYS:
+        patterns_found.append({
+            "type": "consecutive_calorie_deficit",
+            "days": consecutive_deficit,
+            "severity": "critical",
+            "message": (
+                f"Calorie deficit detected for {consecutive_deficit} "
+                f"consecutive days. This may be unsafe."
+            ),
+        })
+
+    # Generate pattern alerts
+    for pattern in patterns_found:
+        alert = Alert(
+            user_id=current_user["user_id"],
+            alert_type="pattern_detected",
+            severity=pattern["severity"],
+            title=f"Pattern: {pattern['type'].replace('_', ' ').title()}",
+            message=pattern["message"],
+            date=today,
+            metadata_json=pattern,
+        )
+        db.add(alert)
+        alerts_generated += 1
+
+    return PatternAnalysisResponse(
+        analyzed_days=days,
+        patterns_found=patterns_found,
+        alerts_generated=alerts_generated,
+        message=f"Analyzed {days} days. Found {len(patterns_found)} patterns.",
+    )
+
+
+@router.get("/health", response_model=MessageResponse)
+async def health_check():
+    """Health check endpoint."""
+    return MessageResponse(message="Compliance service is healthy")

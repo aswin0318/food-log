@@ -1,0 +1,63 @@
+# =============================================================================
+# ConfigMap: PostgreSQL DB-Init Script
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgresql-init-script
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/component: db-init
+data:
+  init.sh: |
+    #!/bin/bash
+    set -e
+
+    echo "[init] Starting PostgreSQL database & user bootstrap..."
+
+    create_db_and_user() {
+      local DB_NAME="$1"
+      local DB_USER="$2"
+      local DB_PASS="$3"
+
+      echo "[init] Processing database '${DB_NAME}' with user '${DB_USER}'..."
+
+      # Create database if not exists
+      psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" \
+        -c "CREATE DATABASE ${DB_NAME};" 2>/dev/null || echo "[init] Database '${DB_NAME}' already exists — skipping."
+
+      # Create user if not exists, or update password
+      psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" <<-EOSQL
+        DO \$\$
+        BEGIN
+          IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${DB_USER}') THEN
+            CREATE ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASS}';
+            RAISE NOTICE 'Created user %', '${DB_USER}';
+          ELSE
+            ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';
+            RAISE NOTICE 'User % already exists — password updated', '${DB_USER}';
+          END IF;
+        END
+        \$\$;
+    EOSQL
+
+      # Grant privileges
+      psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" \
+        -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" 2>/dev/null
+      psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" -d "${DB_NAME}" \
+        -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" 2>/dev/null
+      psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" -d "${DB_NAME}" \
+        -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};" 2>/dev/null
+
+      echo "[init] ✓ Database '${DB_NAME}' → user '${DB_USER}' ready."
+    }
+
+    create_db_and_user "auth_db"       "auth_user"       "$AUTH_USER_PASSWORD"
+    create_db_and_user "food_db"       "food_user"       "$FOOD_USER_PASSWORD"
+    create_db_and_user "macro_db"      "macro_user"      "$MACRO_USER_PASSWORD"
+    create_db_and_user "compliance_db" "compliance_user"  "$COMPLIANCE_USER_PASSWORD"
+
+    echo "[init] Bootstrap complete. All databases and users are ready."

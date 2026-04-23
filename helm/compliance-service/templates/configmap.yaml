@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compliance-service-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: compliance-service
+data:
+  APP_NAME: "Compliance & Alert Service"
+  HOST: "0.0.0.0"
+  PORT: "{{ .Values.complianceService.port }}"
+  MACRO_SERVICE_URL: "http://macro-service:{{ .Values.macroService.port }}"
+  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: macro-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: macro-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.macroService.port }}
+      targetPort: {{ .Values.macroService.port }}
+      protocol: TCP
+      name: http
+  selector:
+    app: macro-service

@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compliance-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: compliance-service
+    app.kubernetes.io/name: compliance-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nutritrack
+spec:
+  replicas: {{ .Values.complianceService.replicas }}
+  selector:
+    matchLabels:
+      app: compliance-service
+  template:
+    metadata:
+      labels:
+        app: compliance-service
+        app.kubernetes.io/name: compliance-service
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: compliance-service
+          image: "{{ .Values.complianceService.image.repository }}:{{ .Values.complianceService.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.complianceService.port }}
+          envFrom:
+            - configMapRef:
+                name: compliance-service-config
+            - secretRef:
+                name: compliance-service-secret
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          readinessProbe:
+            httpGet:
+              path: /api/compliance/health
+              port: {{ .Values.complianceService.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/compliance/health
+              port: {{ .Values.complianceService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
