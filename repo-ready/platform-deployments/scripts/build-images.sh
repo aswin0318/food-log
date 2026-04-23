@@ -1,21 +1,17 @@
 #!/bin/bash
-# ──────────────────────────────────────────────────────────────────────────────
-# Build Docker Images for All Services
+# Build Docker images from sibling repo-ready service folders.
 # Usage: ./build-images.sh [registry] [tag]
-# Example: ./build-images.sh mydockerhubuser v1.0.0
-# ──────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
 REGISTRY="${1:-food-log}"
 TAG="${2:-latest}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_READY_ROOT="$(cd "${PROJECT_ROOT}/.." && pwd)"
 
-echo "════════════════════════════════════════════════════════════"
-echo "  Building Docker Images"
-echo "  Registry: ${REGISTRY}"
-echo "  Tag: ${TAG}"
-echo "════════════════════════════════════════════════════════════"
+echo "Building Docker images"
+echo "Registry: ${REGISTRY}"
+echo "Tag: ${TAG}"
 
 SERVICES=(
   "auth-service"
@@ -26,17 +22,20 @@ SERVICES=(
 )
 
 for SERVICE in "${SERVICES[@]}"; do
+  CONTEXT_DIR="${REPO_READY_ROOT}/${SERVICE}"
+  if [[ ! -d "${CONTEXT_DIR}" ]]; then
+    echo "Missing build context: ${CONTEXT_DIR}" >&2
+    exit 1
+  fi
+
   echo ""
-  echo "── Building ${SERVICE} ──────────────────────────────────────"
+  echo "Building ${SERVICE}"
   docker build \
     -t "${REGISTRY}/${SERVICE}:${TAG}" \
     -t "${REGISTRY}/${SERVICE}:latest" \
-    "${PROJECT_ROOT}/services/${SERVICE}"
-  echo "✓ ${SERVICE} built successfully"
+    "${CONTEXT_DIR}"
+  echo "${SERVICE} built successfully"
 done
 
 echo ""
-echo "════════════════════════════════════════════════════════════"
-echo "  All images built successfully!"
-echo "════════════════════════════════════════════════════════════"
- 
+echo "All images built successfully."

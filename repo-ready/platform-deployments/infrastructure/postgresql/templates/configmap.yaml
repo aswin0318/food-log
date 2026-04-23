@@ -1,5 +1,5 @@
 # =============================================================================
-# ConfigMap: PostgreSQL DB-Init Script
+# ConfigMap: PostgreSQL DB init script
 # =============================================================================
 apiVersion: v1
 kind: ConfigMap
@@ -7,16 +7,16 @@ metadata:
   name: postgresql-init-script
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: postgresql
-    app.kubernetes.io/name: postgresql
-    app.kubernetes.io/part-of: nutritrack
+    app: {{ .Values.postgresql.name }}
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
     app.kubernetes.io/component: db-init
 data:
   init.sh: |
     #!/bin/bash
     set -e
 
-    echo "[init] Starting PostgreSQL database & user bootstrap..."
+    echo "[init] Starting PostgreSQL database and user bootstrap..."
 
     create_db_and_user() {
       local DB_NAME="$1"
@@ -25,11 +25,9 @@ data:
 
       echo "[init] Processing database '${DB_NAME}' with user '${DB_USER}'..."
 
-      # Create database if not exists
       psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" \
-        -c "CREATE DATABASE ${DB_NAME};" 2>/dev/null || echo "[init] Database '${DB_NAME}' already exists — skipping."
+        -c "CREATE DATABASE ${DB_NAME};" 2>/dev/null || echo "[init] Database '${DB_NAME}' already exists, skipping."
 
-      # Create user if not exists, or update password
       psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" <<-EOSQL
         DO \$\$
         BEGIN
@@ -38,13 +36,12 @@ data:
             RAISE NOTICE 'Created user %', '${DB_USER}';
           ELSE
             ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';
-            RAISE NOTICE 'User % already exists — password updated', '${DB_USER}';
+            RAISE NOTICE 'User % already exists, password updated', '${DB_USER}';
           END IF;
         END
         \$\$;
     EOSQL
 
-      # Grant privileges
       psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" \
         -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" 2>/dev/null
       psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" -d "${DB_NAME}" \
@@ -52,12 +49,12 @@ data:
       psql -v ON_ERROR_STOP=0 -U "$POSTGRES_USER" -h "$PGHOST" -p "$PGPORT" -d "${DB_NAME}" \
         -c "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};" 2>/dev/null
 
-      echo "[init] ✓ Database '${DB_NAME}' → user '${DB_USER}' ready."
+      echo "[init] Database '${DB_NAME}' for user '${DB_USER}' is ready."
     }
 
-    create_db_and_user "auth_db"       "auth_user"       "$AUTH_USER_PASSWORD"
-    create_db_and_user "food_db"       "food_user"       "$FOOD_USER_PASSWORD"
-    create_db_and_user "macro_db"      "macro_user"      "$MACRO_USER_PASSWORD"
-    create_db_and_user "compliance_db" "compliance_user"  "$COMPLIANCE_USER_PASSWORD"
+    create_db_and_user "{{ .Values.authService.database.name }}" "{{ .Values.authService.database.username }}" "$AUTH_USER_PASSWORD"
+    create_db_and_user "{{ .Values.foodService.database.name }}" "{{ .Values.foodService.database.username }}" "$FOOD_USER_PASSWORD"
+    create_db_and_user "{{ .Values.macroService.database.name }}" "{{ .Values.macroService.database.username }}" "$MACRO_USER_PASSWORD"
+    create_db_and_user "{{ .Values.complianceService.database.name }}" "{{ .Values.complianceService.database.username }}" "$COMPLIANCE_USER_PASSWORD"
 
-    echo "[init] Bootstrap complete. All databases and users are ready."
+    echo "[init] Bootstrap complete."

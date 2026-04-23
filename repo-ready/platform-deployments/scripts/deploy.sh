@@ -1,47 +1,46 @@
 #!/bin/bash
-# ──────────────────────────────────────────────────────────────────────────────
-# Deploy All Services to Kubernetes via Helm
+# Deploy the NutriTrack stack from the repo-ready platform deployment repo.
 # Usage: ./deploy.sh [namespace]
-# ──────────────────────────────────────────────────────────────────────────────
 
 set -euo pipefail
 
-NAMESPACE="${1:-nutritrack}"
+NAMESPACE="${1:-nutritrack-dev}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HELM_DIR="${PROJECT_ROOT}/helm"
-GLOBAL_VALUES="${HELM_DIR}/values.yaml"
+GLOBAL_VALUES="${PROJECT_ROOT}/values.yaml"
+GATEWAY_NAME="${GATEWAY_NAME:-nutritrack-gateway}"
 
-echo "════════════════════════════════════════════════════════════"
-echo "  Deploying NutriTrack to Kubernetes"
-echo "  Namespace: ${NAMESPACE}"
-echo "════════════════════════════════════════════════════════════"
+if [[ ! -f "${GLOBAL_VALUES}" ]]; then
+  echo "Missing values file: ${GLOBAL_VALUES}" >&2
+  exit 1
+fi
 
-# Step 1: Create namespace
+echo "Deploying NutriTrack to Kubernetes"
+echo "Namespace: ${NAMESPACE}"
+
 echo ""
-echo "── Step 1: Create namespace ──────────────────────────────────"
-kubectl apply -f "${PROJECT_ROOT}/k8s/namespace.yaml"
-echo "✓ Namespace created"
+echo "Step 1: Create namespace"
+kubectl create namespace "${NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+kubectl label namespace "${NAMESPACE}" app.kubernetes.io/part-of=nutritrack app.kubernetes.io/managed-by=helm --overwrite
+echo "Namespace ready"
 
-# Step 2: Deploy PostgreSQL
 echo ""
-echo "── Step 2: Deploy PostgreSQL ─────────────────────────────────"
+echo "Step 2: Deploy PostgreSQL"
 helm upgrade --install postgresql \
-  "${HELM_DIR}/postgresql" \
+  "${PROJECT_ROOT}/infrastructure/postgresql" \
   -f "${GLOBAL_VALUES}" \
+  --set global.namespace="${NAMESPACE}" \
+  --set gateway.namespace="${NAMESPACE}" \
   -n "${NAMESPACE}" \
   --wait --timeout 120s
-echo "✓ PostgreSQL deployed"
+echo "PostgreSQL deployed"
 
-# Step 3: Wait for PostgreSQL to be ready
 echo ""
-echo "── Step 3: Waiting for PostgreSQL... ─────────────────────────"
-kubectl wait --for=condition=ready pod -l app=postgresql -n "${NAMESPACE}" --timeout=120s
-echo "✓ PostgreSQL is ready"
+echo "Step 3: Wait for PostgreSQL"
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=database -n "${NAMESPACE}" --timeout=120s
+echo "PostgreSQL is ready"
 
-# Step 4: Deploy backend services
 echo ""
-echo "── Step 4: Deploy backend services ───────────────────────────"
-
+echo "Step 4: Deploy backend services"
 BACKEND_SERVICES=(
   "auth-service"
   "food-service"
@@ -50,43 +49,45 @@ BACKEND_SERVICES=(
 )
 
 for SERVICE in "${BACKEND_SERVICES[@]}"; do
-  echo "  Deploying ${SERVICE}..."
+  echo "  Deploying ${SERVICE}"
   helm upgrade --install "${SERVICE}" \
-    "${HELM_DIR}/${SERVICE}" \
+    "${PROJECT_ROOT}/microservices/${SERVICE}" \
     -f "${GLOBAL_VALUES}" \
+    --set global.namespace="${NAMESPACE}" \
+    --set gateway.namespace="${NAMESPACE}" \
     -n "${NAMESPACE}" \
     --wait --timeout 90s
-  echo "  ✓ ${SERVICE} deployed"
+  echo "  ${SERVICE} deployed"
 done
 
-# Step 5: Deploy frontend
 echo ""
-echo "── Step 5: Deploy frontend ───────────────────────────────────"
+echo "Step 5: Deploy frontend"
 helm upgrade --install frontend \
-  "${HELM_DIR}/frontend" \
+  "${PROJECT_ROOT}/microservices/frontend" \
   -f "${GLOBAL_VALUES}" \
+  --set global.namespace="${NAMESPACE}" \
+  --set gateway.namespace="${NAMESPACE}" \
   -n "${NAMESPACE}" \
   --wait --timeout 90s
-echo "✓ Frontend deployed"
+echo "Frontend deployed"
 
-# Step 6: Deploy Envoy Gateway resources
 echo ""
-echo "── Step 6: Deploy Envoy Gateway routes ───────────────────────"
-kubectl apply -f "${PROJECT_ROOT}/envoy/gateway-class.yaml"
-kubectl apply -f "${PROJECT_ROOT}/envoy/gateway.yaml"
-kubectl apply -f "${PROJECT_ROOT}/envoy/httproutes.yaml"
-echo "✓ Gateway routes configured"
+echo "Step 6: Deploy Envoy Gateway resources"
+helm upgrade --install envoy-gateway \
+  "${PROJECT_ROOT}/infrastructure/envoy-gateway" \
+  -f "${GLOBAL_VALUES}" \
+  --set global.namespace="${NAMESPACE}" \
+  --set gateway.namespace="${NAMESPACE}" \
+  --set gateway.name="${GATEWAY_NAME}" \
+  -n "${NAMESPACE}" \
+  --wait --timeout 90s
+echo "Gateway resources deployed"
 
-# Step 7: Verify
 echo ""
-echo "════════════════════════════════════════════════════════════"
-echo "  Deployment Complete! Verifying pods..."
-echo "════════════════════════════════════════════════════════════"
-echo ""
+echo "Deployment complete. Current workload status:"
 kubectl get pods -n "${NAMESPACE}" -o wide
 echo ""
 kubectl get svc -n "${NAMESPACE}"
 echo ""
-echo "To access the application, configure HAProxy to point to the Envoy Gateway service."
-echo "Find the gateway service with:"
-echo "  kubectl get svc -n ${NAMESPACE} -l gateway.envoyproxy.io/owning-gateway-name=nutritrack-gateway"
+echo "Find the Envoy Gateway service with:"
+echo "kubectl get svc -n ${NAMESPACE} -l gateway.envoyproxy.io/owning-gateway-name=${GATEWAY_NAME}"

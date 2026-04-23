@@ -1,0 +1,127 @@
+# Global values for the NutriTrack platform deployment repo.
+# Update image repositories/tags and every placeholder secret before deploying.
+
+global:
+  appName: nutritrack
+  namespace: nutritrack-dev
+  corsOrigins: "http://localhost:3000"
+  imagePullSecrets: []
+  jwtSecret: "change-me-in-production-please"
+
+gateway:
+  name: nutritrack-gateway
+  namespace: nutritrack-dev
+  gatewayClassName: envoy-gateway
+  listener:
+    name: http
+    port: 80
+
+postgresql:
+  name: postgresql
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  port: 5432
+  storage:
+    size: "10Gi"
+    storageClass: ""
+  auth:
+    username: postgres
+    password: postgres_root_pass
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+authService:
+  name: auth-service
+  routePrefix: /api/auth
+  healthPath: /api/auth/health
+  image:
+    repository: food-log/auth-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8000
+  database:
+    name: auth_db
+    username: auth_user
+    password: auth_user_pass
+
+foodService:
+  name: food-service
+  routePrefix: /api/food
+  healthPath: /api/food/health
+  image:
+    repository: food-log/food-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8001
+  database:
+    name: food_db
+    username: food_user
+    password: food_user_pass
+
+macroService:
+  name: macro-service
+  routePrefix: /api/macro
+  healthPath: /api/macro/health
+  image:
+    repository: food-log/macro-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8002
+  database:
+    name: macro_db
+    username: macro_user
+    password: macro_user_pass
+
+complianceService:
+  name: compliance-service
+  routePrefix: /api/compliance
+  healthPath: /api/compliance/health
+  image:
+    repository: food-log/compliance-service
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  port: 8003
+  database:
+    name: compliance_db
+    username: compliance_user
+    password: compliance_user_pass
+  thresholds:
+    proteinDeficiencyPct: "80"
+    calorieSurplusPct: "120"
+    calorieDeficitPct: "70"
+    patternDays: "3"
+
+frontend:
+  name: frontend
+  routePrefix: /
+  image:
+    repository: food-log/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  port: 3000
+  apiBaseUrl: ""
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"

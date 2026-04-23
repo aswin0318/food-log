@@ -50,7 +50,7 @@ services:
   auth-service:
     image: ${AUTH_IMAGE}
     build:
-      context: ./services/auth-service
+      context: ../auth-service
       dockerfile: Dockerfile
     container_name: nutritrack-auth
     restart: unless-stopped
@@ -73,7 +73,7 @@ services:
   food-service:
     image: ${FOOD_IMAGE}
     build:
-      context: ./services/food-service
+      context: ../food-service
       dockerfile: Dockerfile
     container_name: nutritrack-food
     restart: unless-stopped
@@ -96,7 +96,7 @@ services:
   macro-service:
     image: ${MACRO_IMAGE}
     build:
-      context: ./services/macro-service
+      context: ../macro-service
       dockerfile: Dockerfile
     container_name: nutritrack-macro
     restart: unless-stopped
@@ -125,7 +125,7 @@ services:
   compliance-service:
     image: ${COMPLIANCE_IMAGE}
     build:
-      context: ./services/compliance-service
+      context: ../compliance-service
       dockerfile: Dockerfile
     container_name: nutritrack-compliance
     restart: unless-stopped
@@ -151,7 +151,7 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE}
     build:
-      context: ./services/frontend
+      context: ../frontend
       dockerfile: Dockerfile
     container_name: nutritrack-frontend
     restart: unless-stopped

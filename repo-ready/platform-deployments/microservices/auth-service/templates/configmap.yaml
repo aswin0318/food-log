@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: auth-service-config
+  name: {{ .Values.authService.name }}-config
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: auth-service
+    app: {{ .Values.authService.name }}
 data:
   APP_NAME: "Auth Service"
   HOST: "0.0.0.0"

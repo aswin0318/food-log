@@ -1,28 +1,28 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: postgresql
+  name: {{ .Values.postgresql.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: postgresql
-    app.kubernetes.io/name: postgresql
+    app: {{ .Values.postgresql.name }}
+    app.kubernetes.io/name: {{ .Values.postgresql.name }}
     app.kubernetes.io/component: database
-    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
 spec:
-  serviceName: postgresql
+  serviceName: {{ .Values.postgresql.name }}
   replicas: 1
   selector:
     matchLabels:
-      app: postgresql
+      app: {{ .Values.postgresql.name }}
   template:
     metadata:
       labels:
-        app: postgresql
-        app.kubernetes.io/name: postgresql
+        app: {{ .Values.postgresql.name }}
+        app.kubernetes.io/name: {{ .Values.postgresql.name }}
         app.kubernetes.io/component: database
     spec:
       containers:
-        - name: postgresql
+        - name: {{ .Values.postgresql.name }}
           image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
           imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
           ports:
@@ -56,7 +56,7 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - postgres
+                - {{ .Values.postgresql.auth.username | quote }}
             initialDelaySeconds: 10
             periodSeconds: 10
             timeoutSeconds: 5
@@ -65,7 +65,7 @@ spec:
               command:
                 - pg_isready
                 - -U
-                - postgres
+                - {{ .Values.postgresql.auth.username | quote }}
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 5

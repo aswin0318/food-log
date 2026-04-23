@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: frontend-config
+  name: {{ .Values.frontend.name }}-config
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: frontend
+    app: {{ .Values.frontend.name }}
 data:
-  NEXT_PUBLIC_API_URL: ""
+  NEXT_PUBLIC_API_URL: "{{ .Values.frontend.apiBaseUrl }}"
   NODE_ENV: "production"

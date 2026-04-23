@@ -1,34 +1,41 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: frontend
+  name: {{ .Values.frontend.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: frontend
-    app.kubernetes.io/name: frontend
+    app: {{ .Values.frontend.name }}
+    app.kubernetes.io/name: {{ .Values.frontend.name }}
     app.kubernetes.io/component: frontend
-    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
 spec:
   replicas: {{ .Values.frontend.replicas }}
   selector:
     matchLabels:
-      app: frontend
+      app: {{ .Values.frontend.name }}
   template:
     metadata:
       labels:
-        app: frontend
-        app.kubernetes.io/name: frontend
+        app: {{ .Values.frontend.name }}
+        app.kubernetes.io/name: {{ .Values.frontend.name }}
         app.kubernetes.io/component: frontend
     spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
-        - name: frontend
+        - name: {{ .Values.frontend.name }}
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.frontend.port }}
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: frontend-config
+                name: {{ .Values.frontend.name }}-config
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}

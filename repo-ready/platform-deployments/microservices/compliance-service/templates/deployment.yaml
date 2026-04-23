@@ -1,35 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: compliance-service
+  name: {{ .Values.complianceService.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: compliance-service
-    app.kubernetes.io/name: compliance-service
+    app: {{ .Values.complianceService.name }}
+    app.kubernetes.io/name: {{ .Values.complianceService.name }}
     app.kubernetes.io/component: backend
-    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
 spec:
   replicas: {{ .Values.complianceService.replicas }}
   selector:
     matchLabels:
-      app: compliance-service
+      app: {{ .Values.complianceService.name }}
   template:
     metadata:
       labels:
-        app: compliance-service
-        app.kubernetes.io/name: compliance-service
+        app: {{ .Values.complianceService.name }}
+        app.kubernetes.io/name: {{ .Values.complianceService.name }}
         app.kubernetes.io/component: backend
     spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
-        - name: compliance-service
+        - name: {{ .Values.complianceService.name }}
           image: "{{ .Values.complianceService.image.repository }}:{{ .Values.complianceService.image.tag }}"
+          imagePullPolicy: {{ .Values.complianceService.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.complianceService.port }}
+              protocol: TCP
           envFrom:
             - configMapRef:
-                name: compliance-service-config
+                name: {{ .Values.complianceService.name }}-config
             - secretRef:
-                name: compliance-service-secret
+                name: {{ .Values.complianceService.name }}-secret
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
@@ -39,13 +47,13 @@ spec:
               memory: {{ .Values.resources.limits.memory }}
           readinessProbe:
             httpGet:
-              path: /api/compliance/health
+              path: {{ .Values.complianceService.healthPath }}
               port: {{ .Values.complianceService.port }}
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/compliance/health
+              path: {{ .Values.complianceService.healthPath }}
               port: {{ .Values.complianceService.port }}
             initialDelaySeconds: 15
             periodSeconds: 30

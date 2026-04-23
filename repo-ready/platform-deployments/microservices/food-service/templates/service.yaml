@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: food-service
+  name: {{ .Values.foodService.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: food-service
+    app: {{ .Values.foodService.name }}
 spec:
   type: ClusterIP
   ports:
@@ -13,4 +13,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: food-service
+    app: {{ .Values.foodService.name }}

@@ -1,35 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: macro-service
+  name: {{ .Values.macroService.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: macro-service
-    app.kubernetes.io/name: macro-service
+    app: {{ .Values.macroService.name }}
+    app.kubernetes.io/name: {{ .Values.macroService.name }}
     app.kubernetes.io/component: backend
-    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
 spec:
   replicas: {{ .Values.macroService.replicas }}
   selector:
     matchLabels:
-      app: macro-service
+      app: {{ .Values.macroService.name }}
   template:
     metadata:
       labels:
-        app: macro-service
-        app.kubernetes.io/name: macro-service
+        app: {{ .Values.macroService.name }}
+        app.kubernetes.io/name: {{ .Values.macroService.name }}
         app.kubernetes.io/component: backend
     spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
-        - name: macro-service
+        - name: {{ .Values.macroService.name }}
           image: "{{ .Values.macroService.image.repository }}:{{ .Values.macroService.image.tag }}"
+          imagePullPolicy: {{ .Values.macroService.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.macroService.port }}
+              protocol: TCP
           envFrom:
             - configMapRef:
-                name: macro-service-config
+                name: {{ .Values.macroService.name }}-config
             - secretRef:
-                name: macro-service-secret
+                name: {{ .Values.macroService.name }}-secret
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
@@ -39,13 +47,13 @@ spec:
               memory: {{ .Values.resources.limits.memory }}
           readinessProbe:
             httpGet:
-              path: /api/macro/health
+              path: {{ .Values.macroService.healthPath }}
               port: {{ .Values.macroService.port }}
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/macro/health
+              path: {{ .Values.macroService.healthPath }}
               port: {{ .Values.macroService.port }}
             initialDelaySeconds: 15
             periodSeconds: 30

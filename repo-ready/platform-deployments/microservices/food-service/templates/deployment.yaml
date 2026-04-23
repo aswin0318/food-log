@@ -1,36 +1,43 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: food-service
+  name: {{ .Values.foodService.name }}
   namespace: {{ .Values.global.namespace }}
   labels:
-    app: food-service
-    app.kubernetes.io/name: food-service
+    app: {{ .Values.foodService.name }}
+    app.kubernetes.io/name: {{ .Values.foodService.name }}
     app.kubernetes.io/component: backend
-    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/part-of: {{ .Values.global.appName }}
 spec:
   replicas: {{ .Values.foodService.replicas }}
   selector:
     matchLabels:
-      app: food-service
+      app: {{ .Values.foodService.name }}
   template:
     metadata:
       labels:
-        app: food-service
-        app.kubernetes.io/name: food-service
+        app: {{ .Values.foodService.name }}
+        app.kubernetes.io/name: {{ .Values.foodService.name }}
         app.kubernetes.io/component: backend
     spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- range . }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
       containers:
-        - name: food-service
+        - name: {{ .Values.foodService.name }}
           image: "{{ .Values.foodService.image.repository }}:{{ .Values.foodService.image.tag }}"
+          imagePullPolicy: {{ .Values.foodService.image.pullPolicy }}
           ports:
             - containerPort: {{ .Values.foodService.port }}
               protocol: TCP
           envFrom:
             - configMapRef:
-                name: food-service-config
+                name: {{ .Values.foodService.name }}-config
             - secretRef:
-                name: food-service-secret
+                name: {{ .Values.foodService.name }}-secret
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}
@@ -40,13 +47,13 @@ spec:
               memory: {{ .Values.resources.limits.memory }}
           readinessProbe:
             httpGet:
-              path: /api/food/health
+              path: {{ .Values.foodService.healthPath }}
               port: {{ .Values.foodService.port }}
             initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /api/food/health
+              path: {{ .Values.foodService.healthPath }}
               port: {{ .Values.foodService.port }}
             initialDelaySeconds: 15
             periodSeconds: 30
