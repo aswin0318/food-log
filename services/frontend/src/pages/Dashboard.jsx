@@ -131,16 +131,16 @@ export default function Dashboard() {
              try {
                const res = await complianceApi.analyzePatterns(7)
                const avgText = res.weekly_averages ? 
-                 `Averages: ${res.weekly_averages.avg_calories} kcal, ${res.weekly_averages.avg_protein}g protein\n` : ''
+                 `Logged Day Analysis:\n- Average: ${res.weekly_averages.avg_calories} kcal (${res.weekly_averages.status})\n- Protein: ${res.weekly_averages.avg_protein}g\n` : ''
                
                const missingText = res.missing_logs?.length > 0 ? 
-                 `Missing Logs:\n${res.missing_logs.map(m => `- ${m.date}: ${m.status}`).join('\n')}\n` : 'No missing logs found!\n'
+                 `Missing Logs (${res.weekly_averages.missed_days} days):\n${res.missing_logs.map(m => `- ${m.date}: ${m.status}`).join('\n')}\n` : 'No missing logs found!\n'
                
                const yetToLogText = res.yet_to_log?.length > 0 ?
                  `Yet to log today: ${res.yet_to_log.join(', ')}\n` : ''
 
                const patternText = res.patterns_found?.length > 0 ?
-                 `Trends Detected:\n${res.patterns_found.map(p => `- ${p.message}`).join('\n')}` : 'No unusual trends detected.'
+                 `Trends Detected:\n${res.patterns_found.map(p => `- ${p.message}`).join('\n')}` : ''
 
                alert(`📊 WEEKLY ANALYSIS REPORT\n\n${avgText}\n${missingText}\n${yetToLogText}\n${patternText}`)
              } catch (e) {

@@ -144,59 +144,63 @@ def _generate_alerts(
                 "target_meals": 5,
             },
         ))
+    return alerts
 
 async def _generate_time_reminders(user_id, comparison, db: AsyncSession):
     """Generate time-based reminders for calorie intake."""
-    from datetime import datetime
-    now = datetime.now()
-    hour = now.hour
-    today = now.date()
-    
-    # Slots
-    slots = {
-        8: ("Morning Reminder", "morning_reminder"),
-        13: ("Noon Reminder", "noon_reminder"),
-        19: ("Evening Reminder", "evening_reminder"),
-        22: ("Night Summary", "night_reminder")
-    }
-    
-    if hour not in slots:
-        return
+    try:
+        from datetime import datetime
+        now = datetime.now()
+        hour = now.hour
+        today = now.date()
         
-    title, alert_type = slots[hour]
-    
-    # Check if already generated today
-    from sqlalchemy import select, and_
-    result = await db.execute(
-        select(Alert).where(
-            and_(
-                Alert.user_id == user_id,
-                Alert.alert_type == alert_type,
-                Alert.date == today
+        # Slots
+        slots = {
+            8: ("Morning Reminder", "morning_reminder"),
+            13: ("Noon Reminder", "noon_reminder"),
+            19: ("Evening Reminder", "evening_reminder"),
+            22: ("Night Summary", "night_reminder")
+        }
+        
+        if hour not in slots:
+            return
+            
+        title, alert_type = slots[hour]
+        
+        # Check if already generated today
+        from sqlalchemy import select, and_
+        result = await db.execute(
+            select(Alert).where(
+                and_(
+                    Alert.user_id == user_id,
+                    Alert.alert_type == alert_type,
+                    Alert.date == today
+                )
             )
         )
-    )
-    if result.scalar_one_or_none():
-        return
+        if result.scalar_one_or_none():
+            return
 
-    target_cals = comparison.get("target", {}).get("daily_calorie_target", 2000)
-    actual_cals = comparison.get("actual", {}).get("total_calories", 0)
-    remaining = target_cals - actual_cals
-    
-    message = f"It's {title.split()[0]}! You have {max(0, remaining)} calories left to reach your goal of {target_cals} kcal."
-    if remaining < 0:
-        message = f"It's {title.split()[0]}! You've already reached your calorie goal for today."
+        target_cals = comparison.get("target", {}).get("daily_calorie_target", 2000)
+        actual_cals = comparison.get("actual", {}).get("total_calories", 0)
+        remaining = target_cals - actual_cals
+        
+        message = f"It's {title.split()[0]}! You have {max(0, int(remaining))} calories left to reach your goal of {target_cals} kcal."
+        if remaining < 0:
+            message = f"It's {title.split()[0]}! You've already reached your calorie goal for today."
 
-    alert = Alert(
-        user_id=user_id,
-        alert_type=alert_type,
-        severity="info",
-        title=title,
-        message=message,
-        date=today,
-        metadata_json={"remaining_calories": remaining, "current_hour": hour}
-    )
-    db.add(alert)
+        alert = Alert(
+            user_id=user_id,
+            alert_type=alert_type,
+            severity="info",
+            title=title,
+            message=message,
+            date=today,
+            metadata_json={"remaining_calories": remaining, "current_hour": hour}
+        )
+        db.add(alert)
+    except Exception as e:
+        print(f"Error generating reminder: {e}")
 
 
 
@@ -259,12 +263,20 @@ async def check_compliance(
         )
         db.add(check)
 
-    # Generate alerts for non-compliant items
-    if not overall_compliant:
-        new_alerts = _generate_alerts(
-            current_user["user_id"], target_date, comparison
+    # Generate daily alerts
+    alerts = _generate_alerts(current_user["user_id"], target_date, comparison)
+    for alert in alerts:
+        # Check for duplicates to avoid spamming the same alert
+        dup = await db.execute(
+            select(Alert).where(
+                and_(
+                    Alert.user_id == current_user["user_id"],
+                    Alert.alert_type == alert.alert_type,
+                    Alert.date == target_date,
+                )
+            )
         )
-        for alert in new_alerts:
+        if not dup.scalar_one_or_none():
             db.add(alert)
 
     await db.flush()
@@ -392,6 +404,10 @@ async def analyze_patterns(
     total_protein = 0
     logged_days = 0
     
+    target_cals = 2000 # Default fallback
+    target_protein = 150
+    goal = "maintaining"
+    
     missing_logs = []
     yet_to_log = []
 
@@ -410,6 +426,11 @@ async def analyze_patterns(
                 logged_days += 1
                 total_cals += comparison["actual"]["total_calories"]
                 total_protein += comparison["actual"]["total_protein"]
+                
+                # Update targets from the most recent comparison
+                target_cals = comparison["target"]["daily_calorie_target"]
+                target_protein = comparison["target"]["daily_protein_target"]
+                goal = comparison["target"]["goal"]
                 
                 meal_count = comparison.get("actual", {}).get("meal_count", 0)
                 if meal_count == 0:
@@ -431,12 +452,29 @@ async def analyze_patterns(
         if current_hour < start:
             yet_to_log.append(slot_name)
 
-    # Calculate averages
+    # Calculate averages based on LOGGED days
+    avg_cals = round(total_cals / logged_days, 1) if logged_days > 0 else 0
+    avg_protein = round(total_protein / logged_days, 1) if logged_days > 0 else 0
+    
+    # Determine "On Track" status
+    status = "On Track"
+    cal_diff_pct = (avg_cals / target_cals * 100) if target_cals > 0 else 100
+    
+    if goal == "cutting" and cal_diff_pct > 110:
+        status = "Above Target (Surplus)"
+    elif goal == "bulking" and cal_diff_pct < 90:
+        status = "Below Target (Deficit)"
+    elif goal == "maintaining" and (cal_diff_pct > 115 or cal_diff_pct < 85):
+        status = "Off Track"
+
     averages = {
-        "avg_calories": round(total_cals / logged_days, 1) if logged_days > 0 else 0,
-        "avg_protein": round(total_protein / logged_days, 1) if logged_days > 0 else 0,
+        "avg_calories": avg_cals,
+        "avg_protein": avg_protein,
         "logged_days": logged_days,
-        "missed_days": days - logged_days
+        "missed_days": days - logged_days,
+        "status": status,
+        "target_calories": target_cals,
+        "target_protein": target_protein
     }
 
     # Detect trends
@@ -473,7 +511,7 @@ async def analyze_patterns(
         analyzed_days=days,
         patterns_found=patterns_found,
         alerts_generated=alerts_generated,
-        message=f"Analyzed {days} days. Logged {logged_days} days.",
+        message=f"Logged Day Analysis: {logged_days}/{days} days analyzed.",
         weekly_averages=averages,
         missing_logs=missing_logs,
         yet_to_log=yet_to_log
