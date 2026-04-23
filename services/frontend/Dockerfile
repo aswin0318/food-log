@@ -4,18 +4,17 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# Stage 2: Run
-FROM node:20-alpine
-RUN addgroup -g 1001 -S appuser && adduser -S -u 1001 -G appuser appuser
-WORKDIR /app
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-RUN chown -R appuser:appuser /app
-USER appuser
+# Stage 2: Serve with nginx
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+
+# Ensure directories exist and set permissions for non-root user (101 is the default nginx user in alpine)
+RUN mkdir -p /var/cache/nginx /var/run /var/log/nginx && \
+    chown -R 101:101 /usr/share/nginx/html /var/cache/nginx /var/run /var/log/nginx /tmp
+
+USER 101
 EXPOSE 3000
-ENV NODE_ENV=production PORT=3000 HOSTNAME="0.0.0.0"
-CMD ["node", "server.js"]
+CMD ["nginx", "-g", "daemon off;"]
