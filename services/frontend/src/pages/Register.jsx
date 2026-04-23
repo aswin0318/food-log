@@ -19,7 +19,12 @@ export default function Register() {
       login(res.token.access_token, res.user)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setError(detail[0].msg)
+      } else {
+        setError(detail || err.message || 'Registration failed')
+      }
     } finally {
       setLoading(false)
     }

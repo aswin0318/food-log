@@ -41,7 +41,12 @@ export default function FoodLog() {
       setShowForm(false)
       fetchMeals()
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to add meal')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setError(detail[0].msg)
+      } else {
+        setError(detail || err.message || 'Failed to add meal')
+      }
     } finally {
       setSubmitting(false)
     }

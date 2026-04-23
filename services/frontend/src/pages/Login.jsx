@@ -19,7 +19,12 @@ export default function Login() {
       login(res.token.access_token, res.user)
       navigate('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Login failed')
+      const detail = err.response?.data?.detail
+      if (Array.isArray(detail)) {
+        setError(detail[0].msg)
+      } else {
+        setError(detail || err.message || 'Login failed')
+      }
     } finally {
       setLoading(false)
     }
