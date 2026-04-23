@@ -30,6 +30,7 @@ export const macroApi = {
   getWeeklySummary: (startDate) => api.get(`/api/macro/weekly?start_date=${startDate}`).then(r => r.data),
   getTargets: () => api.get('/api/macro/targets').then(r => r.data),
   updateTargets: (data) => api.put('/api/macro/targets', data).then(r => r.data),
+  onboard: (data) => api.post('/api/macro/onboard', data).then(r => r.data),
   getComparison: (date) => api.get(`/api/macro/comparison/${date}`).then(r => r.data),
 }
 

@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Integer, Float, Date, DateTime, UniqueConstraint, func
+from sqlalchemy import Integer, Float, Date, DateTime, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -32,6 +32,12 @@ class MacroTarget(Base):
     daily_fat_target: Mapped[int] = mapped_column(
         Integer, default=65, nullable=False
     )
+    height: Mapped[float] = mapped_column(Float, nullable=True)
+    weight: Mapped[float] = mapped_column(Float, nullable=True)
+    age: Mapped[int] = mapped_column(Integer, nullable=True)
+    gender: Mapped[str] = mapped_column(String(10), nullable=True)
+    goal: Mapped[str] = mapped_column(String(20), default="maintaining", nullable=False)
+    activity_level: Mapped[str] = mapped_column(String(20), default="sedentary", nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
         onupdate=func.now(), nullable=False

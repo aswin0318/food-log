@@ -15,6 +15,7 @@ from app.schemas import (
     MacroTargetResponse,
     MessageResponse,
     UpdateTargetsRequest,
+    OnboardUserRequest,
     WeeklySummaryResponse,
 )
 
@@ -217,6 +218,94 @@ async def get_targets(
             daily_carbs_target=250,
             daily_fat_target=65,
         )
+
+    return MacroTargetResponse.model_validate(target)
+
+
+@router.post("/onboard", response_model=MacroTargetResponse)
+async def onboard_user(
+    body: OnboardUserRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Calculate and set macro targets based on physical metrics and goal."""
+    # 1. Calculate BMR (Mifflin-St Jeor)
+    # Men: (10 × weight in kg) + (6.25 × height in cm) - (5 × age in years) + 5
+    # Women: (10 × weight in kg) + (6.25 × height in cm) - (5 × age in years) - 161
+    if body.gender == "male":
+        bmr = (10 * body.weight) + (6.25 * body.height) - (5 * body.age) + 5
+    else:
+        bmr = (10 * body.weight) + (6.25 * body.height) - (5 * body.age) - 161
+
+    # 2. Activity Multipliers
+    activity_multipliers = {
+        "sedentary": 1.2,
+        "lightly_active": 1.375,
+        "moderately_active": 1.55,
+        "very_active": 1.725,
+        "extra_active": 1.9,
+    }
+    tdee = bmr * activity_multipliers.get(body.activity_level, 1.2)
+
+    # 3. Apply Goal
+    if body.goal == "bulking":
+        target_cals = tdee + 200
+    elif body.goal == "cutting":
+        target_cals = tdee - 200
+    else:
+        target_cals = tdee
+
+    target_cals = max(1200, int(target_cals))  # Minimum floor
+
+    # 4. Calculate Macros
+    # Protein: 2g per kg bodyweight
+    protein = int(2.0 * body.weight)
+    # Fat: 1g per kg bodyweight
+    fat = int(1.0 * body.weight)
+    
+    # Carbs: Remaining calories / 4
+    protein_cals = protein * 4
+    fat_cals = fat * 9
+    remaining_cals = target_cals - (protein_cals + fat_cals)
+    carbs = max(50, int(remaining_cals / 4))
+
+    # Save to database
+    result = await db.execute(
+        select(MacroTarget).where(
+            MacroTarget.user_id == current_user["user_id"]
+        )
+    )
+    target = result.scalar_one_or_none()
+
+    if target:
+        target.height = body.height
+        target.weight = body.weight
+        target.age = body.age
+        target.gender = body.gender
+        target.goal = body.goal
+        target.activity_level = body.activity_level
+        target.daily_calorie_target = target_cals
+        target.daily_protein_target = protein
+        target.daily_carbs_target = carbs
+        target.daily_fat_target = fat
+    else:
+        target = MacroTarget(
+            user_id=current_user["user_id"],
+            height=body.height,
+            weight=body.weight,
+            age=body.age,
+            gender=body.gender,
+            goal=body.goal,
+            activity_level=body.activity_level,
+            daily_calorie_target=target_cals,
+            daily_protein_target=protein,
+            daily_carbs_target=carbs,
+            daily_fat_target=fat,
+        )
+        db.add(target)
+
+    await db.flush()
+    await db.refresh(target)
 
     return MacroTargetResponse.model_validate(target)
 

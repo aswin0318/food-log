@@ -13,6 +13,15 @@ class UpdateTargetsRequest(BaseModel):
     daily_fat_target: int = Field(..., ge=10, le=500)
 
 
+class OnboardUserRequest(BaseModel):
+    height: float = Field(..., ge=50, le=300)
+    weight: float = Field(..., ge=20, le=500)
+    age: int = Field(..., ge=10, le=120)
+    gender: str = Field(..., pattern="^(male|female)$")
+    goal: str = Field(..., pattern="^(cutting|bulking|maintaining)$")
+    activity_level: str = Field(..., pattern="^(sedentary|lightly_active|moderately_active|very_active|extra_active)$")
+
+
 # ── Response Schemas ─────────────────────────────────────────────────────────
 
 class MacroTargetResponse(BaseModel):
@@ -21,6 +30,12 @@ class MacroTargetResponse(BaseModel):
     daily_protein_target: int
     daily_carbs_target: int
     daily_fat_target: int
+    height: float | None = None
+    weight: float | None = None
+    age: int | None = None
+    gender: str | None = None
+    goal: str = "maintaining"
+    activity_level: str = "sedentary"
     updated_at: datetime | None = None
 
     model_config = {"from_attributes": True}

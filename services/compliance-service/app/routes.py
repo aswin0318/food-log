@@ -57,6 +57,9 @@ def _generate_alerts(
     """Generate alerts based on compliance check results."""
     alerts = []
 
+    goal = comparison.get("target", {}).get("goal", "maintaining")
+    meal_count = comparison.get("actual", {}).get("meal_count", 0)
+
     # Protein deficiency
     if comparison.get("protein_status") == "deficient":
         pct = comparison.get("protein_percentage", 0)
@@ -81,10 +84,11 @@ def _generate_alerts(
     # Calorie surplus
     if comparison.get("calorie_status") == "surplus":
         pct = comparison.get("calorie_percentage", 0)
+        severity = "critical" if goal == "cutting" else ("warning" if pct <= 140 else "critical")
         alerts.append(Alert(
             user_id=user_id,
             alert_type="calorie_surplus",
-            severity="warning" if pct <= 140 else "critical",
+            severity=severity,
             title="Calorie Surplus Alert",
             message=(
                 f"Your calorie intake on {target_date.isoformat()} was "
@@ -102,10 +106,11 @@ def _generate_alerts(
     # Calorie deficit
     if comparison.get("calorie_status") == "deficit":
         pct = comparison.get("calorie_percentage", 0)
+        severity = "critical" if goal == "bulking" else ("warning" if pct >= 50 else "critical")
         alerts.append(Alert(
             user_id=user_id,
             alert_type="calorie_deficit",
-            severity="warning" if pct >= 50 else "critical",
+            severity=severity,
             title="Calorie Deficit Warning",
             message=(
                 f"Your calorie intake on {target_date.isoformat()} was only "
@@ -117,6 +122,24 @@ def _generate_alerts(
                 "actual_percentage": pct,
                 "threshold": settings.CALORIE_DEFICIT_PCT,
                 "macro_type": "calories",
+            },
+        ))
+        
+    # Meal frequency for bulking
+    if goal == "bulking" and 0 < meal_count < 5:
+        alerts.append(Alert(
+            user_id=user_id,
+            alert_type="meal_frequency_warning",
+            severity="warning",
+            title="Increase Meal Frequency",
+            message=(
+                f"You only logged {meal_count} meals on {target_date.isoformat()}. "
+                f"Since your goal is bulking, try to eat at least 5 times a day to maintain your surplus."
+            ),
+            date=target_date,
+            metadata_json={
+                "actual_meals": meal_count,
+                "target_meals": 5,
             },
         ))
 
@@ -301,13 +324,23 @@ async def analyze_patterns(
 
     # Fetch comparison data for each day
     daily_results = []
+    valid_days = 0
     for i in range(days):
         day = today - timedelta(days=i)
         try:
             comparison = await _fetch_comparison(day, request)
+            meal_count = comparison.get("actual", {}).get("meal_count", 0)
+            if meal_count > 0:
+                valid_days += 1
             daily_results.append({"date": day, "data": comparison})
         except HTTPException:
             daily_results.append({"date": day, "data": None})
+
+    if valid_days < days:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Weekly analysis requires {days} full days of logged meals. You only have {valid_days} days of data."
+        )
 
     # Detect consecutive protein deficiency
     consecutive_protein = 0
