@@ -9,4 +9,3 @@ data:
   APP_NAME: "Auth Service"
   HOST: "0.0.0.0"
   PORT: "{{ .Values.authService.port }}"
-  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"

@@ -10,7 +10,6 @@ data:
   HOST: "0.0.0.0"
   PORT: "{{ .Values.complianceService.port }}"
   MACRO_SERVICE_URL: "http://{{ .Values.macroService.name }}:{{ .Values.macroService.port }}"
-  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"
   PROTEIN_DEFICIENCY_PCT: "{{ .Values.complianceService.thresholds.proteinDeficiencyPct }}"
   CALORIE_SURPLUS_PCT: "{{ .Values.complianceService.thresholds.calorieSurplusPct }}"
   CALORIE_DEFICIT_PCT: "{{ .Values.complianceService.thresholds.calorieDeficitPct }}"

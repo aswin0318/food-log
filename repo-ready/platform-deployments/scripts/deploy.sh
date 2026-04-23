@@ -24,7 +24,12 @@ kubectl label namespace "${NAMESPACE}" app.kubernetes.io/part-of=nutritrack app.
 echo "Namespace ready"
 
 echo ""
-echo "Step 2: Deploy PostgreSQL"
+echo "Step 2: Apply plain Secret manifests"
+kubectl apply -n "${NAMESPACE}" -f "${PROJECT_ROOT}/secrets"
+echo "Secrets applied"
+
+echo ""
+echo "Step 3: Deploy PostgreSQL"
 helm upgrade --install postgresql \
   "${PROJECT_ROOT}/infrastructure/postgresql" \
   -f "${GLOBAL_VALUES}" \
@@ -35,12 +40,12 @@ helm upgrade --install postgresql \
 echo "PostgreSQL deployed"
 
 echo ""
-echo "Step 3: Wait for PostgreSQL"
+echo "Step 4: Wait for PostgreSQL"
 kubectl wait --for=condition=ready pod -l app.kubernetes.io/component=database -n "${NAMESPACE}" --timeout=120s
 echo "PostgreSQL is ready"
 
 echo ""
-echo "Step 4: Deploy backend services"
+echo "Step 5: Deploy backend services"
 BACKEND_SERVICES=(
   "auth-service"
   "food-service"
@@ -61,7 +66,7 @@ for SERVICE in "${BACKEND_SERVICES[@]}"; do
 done
 
 echo ""
-echo "Step 5: Deploy frontend"
+echo "Step 6: Deploy frontend"
 helm upgrade --install frontend \
   "${PROJECT_ROOT}/microservices/frontend" \
   -f "${GLOBAL_VALUES}" \
@@ -72,7 +77,7 @@ helm upgrade --install frontend \
 echo "Frontend deployed"
 
 echo ""
-echo "Step 6: Deploy Envoy Gateway resources"
+echo "Step 7: Deploy Envoy Gateway resources"
 helm upgrade --install envoy-gateway \
   "${PROJECT_ROOT}/infrastructure/envoy-gateway" \
   -f "${GLOBAL_VALUES}" \

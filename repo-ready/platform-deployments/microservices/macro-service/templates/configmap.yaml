@@ -11,4 +11,3 @@ data:
   PORT: "{{ .Values.macroService.port }}"
   FOOD_SERVICE_URL: "http://{{ .Values.foodService.name }}:{{ .Values.foodService.port }}"
   AUTH_SERVICE_URL: "http://{{ .Values.authService.name }}:{{ .Values.authService.port }}"
-  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"

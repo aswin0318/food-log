@@ -36,7 +36,7 @@ spec:
             - |
               echo "[wait] Waiting for PostgreSQL to accept connections..."
               until pg_isready \
-                -h {{ .Values.postgresql.name }}.{{ .Values.global.namespace }}.svc.cluster.local \
+                -h {{ .Values.postgresql.primaryHost }} \
                 -p {{ .Values.postgresql.port }} \
                 -U "$POSTGRES_USER"; do
                 echo "[wait] PostgreSQL not ready yet. Retrying in 5s..."
@@ -47,7 +47,7 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: POSTGRES_USER
       containers:
         - name: db-init
@@ -60,36 +60,36 @@ spec:
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: POSTGRES_USER
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: POSTGRES_PASSWORD
             - name: PGHOST
-              value: "{{ .Values.postgresql.name }}.{{ .Values.global.namespace }}.svc.cluster.local"
+              value: "{{ .Values.postgresql.primaryHost }}"
             - name: PGPORT
               value: "{{ .Values.postgresql.port }}"
             - name: AUTH_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: AUTH_USER_PASSWORD
             - name: FOOD_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: FOOD_USER_PASSWORD
             - name: MACRO_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: MACRO_USER_PASSWORD
             - name: COMPLIANCE_USER_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: postgresql-secret
+                  name: {{ .Values.postgresql.secretName }}
                   key: COMPLIANCE_USER_PASSWORD
           volumeMounts:
             - name: init-script

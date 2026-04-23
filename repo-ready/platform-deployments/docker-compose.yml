@@ -63,7 +63,6 @@ services:
       PORT: "8000"
       DATABASE_URL: "postgresql+asyncpg://${AUTH_DB_USER}:${AUTH_DB_PASSWORD}@postgresql:5432/${AUTH_DB_NAME}"
       JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
     ports:
       - "8000:8000"
     networks:
@@ -86,7 +85,6 @@ services:
       PORT: "8001"
       DATABASE_URL: "postgresql+asyncpg://${FOOD_DB_USER}:${FOOD_DB_PASSWORD}@postgresql:5432/${FOOD_DB_NAME}"
       JWT_SECRET: ${JWT_SECRET}
-      CORS_ORIGINS: ${CORS_ORIGINS}
     ports:
       - "8001:8001"
     networks:
@@ -115,7 +113,6 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       FOOD_SERVICE_URL: "http://food-service:8001"
       AUTH_SERVICE_URL: "http://auth-service:8000"
-      CORS_ORIGINS: ${CORS_ORIGINS}
     ports:
       - "8002:8002"
     networks:
@@ -141,7 +138,6 @@ services:
       DATABASE_URL: "postgresql+asyncpg://${COMPLIANCE_DB_USER}:${COMPLIANCE_DB_PASSWORD}@postgresql:5432/${COMPLIANCE_DB_NAME}"
       JWT_SECRET: ${JWT_SECRET}
       MACRO_SERVICE_URL: "http://macro-service:8002"
-      CORS_ORIGINS: ${CORS_ORIGINS}
     ports:
       - "8003:8003"
     networks:

@@ -30,11 +30,6 @@ class Settings:
     CALORIE_DEFICIT_PCT: float = float(os.getenv("CALORIE_DEFICIT_PCT", "70"))
     PATTERN_DAYS: int = int(os.getenv("PATTERN_DAYS", "3"))
 
-    # CORS
-    CORS_ORIGINS: list[str] = os.getenv(
-        "CORS_ORIGINS", "http://localhost:3000"
-    ).split(",")
-
     # Service
     HOST: str = os.getenv("HOST", "0.0.0.0")
     PORT: int = int(os.getenv("PORT", "8003"))

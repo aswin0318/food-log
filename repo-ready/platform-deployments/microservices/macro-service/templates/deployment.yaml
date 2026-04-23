@@ -37,7 +37,7 @@ spec:
             - configMapRef:
                 name: {{ .Values.macroService.name }}-config
             - secretRef:
-                name: {{ .Values.macroService.name }}-secret
+                name: {{ .Values.macroService.secretName }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}

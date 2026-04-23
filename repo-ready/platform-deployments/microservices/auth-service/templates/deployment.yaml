@@ -37,7 +37,7 @@ spec:
             - configMapRef:
                 name: {{ .Values.authService.name }}-config
             - secretRef:
-                name: {{ .Values.authService.name }}-secret
+                name: {{ .Values.authService.secretName }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}

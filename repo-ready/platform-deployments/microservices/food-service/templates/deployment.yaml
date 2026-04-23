@@ -37,7 +37,7 @@ spec:
             - configMapRef:
                 name: {{ .Values.foodService.name }}-config
             - secretRef:
-                name: {{ .Values.foodService.name }}-secret
+                name: {{ .Values.foodService.secretName }}
           resources:
             requests:
               cpu: {{ .Values.resources.requests.cpu }}

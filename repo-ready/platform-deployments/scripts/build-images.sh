@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-REGISTRY="${1:-food-log}"
+REGISTRY="${1:-nutritrack360}"
 TAG="${2:-latest}"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO_READY_ROOT="$(cd "${PROJECT_ROOT}/.." && pwd)"

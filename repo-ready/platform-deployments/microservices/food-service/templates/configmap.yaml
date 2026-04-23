@@ -9,4 +9,3 @@ data:
   APP_NAME: "Food Logging Service"
   HOST: "0.0.0.0"
   PORT: "{{ .Values.foodService.port }}"
-  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"
