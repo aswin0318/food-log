@@ -161,8 +161,11 @@ services:
       - macro-service
       - compliance-service
     environment:
-      NEXT_PUBLIC_API_URL: ""
       NODE_ENV: production
+      AUTH_SERVICE_URL: "http://auth-service:8000"
+      FOOD_SERVICE_URL: "http://food-service:8001"
+      MACRO_SERVICE_URL: "http://macro-service:8002"
+      COMPLIANCE_SERVICE_URL: "http://compliance-service:8003"
     ports:
       - "3000:3000"
     networks:
