@@ -30,12 +30,13 @@ function ProtectedRoute({ children, requireOnboard = true }) {
 }
 
 export default function App() {
-  const { token } = useAuth()
+  const { token, targets } = useAuth()
+  const showNavbar = token && targets && targets.height !== null
 
   return (
     <div className="app">
-      {token && <Navbar />}
-      <main className={token ? 'main-content' : ''}>
+      {showNavbar && <Navbar />}
+      <main className={showNavbar ? 'main-content' : ''}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />

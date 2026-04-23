@@ -40,6 +40,15 @@ export function AuthProvider({ children }) {
     // token change will trigger useEffect to fetch targets
   }
 
+  const refreshTargets = async () => {
+    try {
+      const targetData = await macroApi.getTargets()
+      setTargets(targetData)
+    } catch (err) {
+      console.error("Failed to refresh targets:", err)
+    }
+  }
+
   const logout = () => {
     localStorage.removeItem('token')
     setToken(null)
@@ -50,7 +59,7 @@ export function AuthProvider({ children }) {
   if (loading) return null
 
   return (
-    <AuthContext.Provider value={{ user, token, targets, setTargets, login, logout }}>
+    <AuthContext.Provider value={{ user, token, targets, setTargets, refreshTargets, login, logout }}>
       {children}
     </AuthContext.Provider>
   )

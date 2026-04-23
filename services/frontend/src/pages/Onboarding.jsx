@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { macroApi } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 export function Onboarding() {
   const navigate = useNavigate()
+  const { refreshTargets } = useAuth()
   const [form, setForm] = useState({
     gender: 'male',
     age: '',
@@ -30,6 +32,7 @@ export function Onboarding() {
 
     try {
       await macroApi.onboard(payload)
+      await refreshTargets()
       navigate('/')
     } catch (err) {
       const detail = err.response?.data?.detail
@@ -55,7 +58,7 @@ export function Onboarding() {
           <div style={{ display: 'flex', gap: '1rem' }}>
             <div className="form-group" style={{ flex: 1 }}>
               <label>Gender</label>
-              <select className="input" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}>
+              <select className="select" value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })}>
                 <option value="male">Male</option>
                 <option value="female">Female</option>
               </select>
@@ -84,7 +87,7 @@ export function Onboarding() {
 
           <div className="form-group">
             <label>Activity Level</label>
-            <select className="input" value={form.activity_level} onChange={e => setForm({ ...form, activity_level: e.target.value })}>
+            <select className="select" value={form.activity_level} onChange={e => setForm({ ...form, activity_level: e.target.value })}>
               <option value="sedentary">Sedentary (little to no exercise)</option>
               <option value="lightly_active">Lightly Active (1-3 days/week)</option>
               <option value="moderately_active">Moderately Active (3-5 days/week)</option>
@@ -95,7 +98,7 @@ export function Onboarding() {
 
           <div className="form-group">
             <label>Primary Goal</label>
-            <select className="input" value={form.goal} onChange={e => setForm({ ...form, goal: e.target.value })}>
+            <select className="select" value={form.goal} onChange={e => setForm({ ...form, goal: e.target.value })}>
               <option value="cutting">Cutting (Fat Loss)</option>
               <option value="maintaining">Maintaining</option>
               <option value="bulking">Bulking (Muscle Gain)</option>

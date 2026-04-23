@@ -101,7 +101,10 @@ body::before {
   border-color: var(--accent-violet);
 }
 .input::placeholder { color: var(--text-muted); }
-.select option { background: #1a1a2e; }
+.select option { 
+  background: #1a1a2e; 
+  color: white;
+}
 
 .form-group { display: flex; flex-direction: column; gap: 0.375rem; }
 .form-group label {
@@ -175,10 +178,13 @@ body::before {
   justify-content: center;
   min-height: 100vh;
   padding: 2rem;
+  background: var(--bg-primary);
+  width: 100%;
 }
 .auth-card {
   width: 100%;
   max-width: 420px;
+  background: rgba(15, 15, 25, 0.8);
 }
 .auth-card h1 { text-align: center; margin-bottom: 0.5rem; }
 .auth-card p { text-align: center; color: var(--text-secondary); margin-bottom: 2rem; }
