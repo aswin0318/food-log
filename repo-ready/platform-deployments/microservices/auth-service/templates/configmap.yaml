@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-service-config
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: auth-service
+data:
+  APP_NAME: "Auth Service"
+  HOST: "0.0.0.0"
+  PORT: "{{ .Values.authService.port }}"
+  CORS_ORIGINS: "{{ .Values.global.corsOrigins }}"

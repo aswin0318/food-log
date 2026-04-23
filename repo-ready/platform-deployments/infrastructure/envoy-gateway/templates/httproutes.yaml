@@ -1,0 +1,94 @@
+---
+# Frontend Route: / → frontend-service:3000
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: frontend-route
+  namespace: nutritrack-dev
+spec:
+  parentRefs:
+    - name: nutritrack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: frontend
+          port: 3000
+
+---
+# Auth Service Route: /api/auth → auth-service:8000
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: auth-route
+  namespace: nutritrack-dev
+spec:
+  parentRefs:
+    - name: nutritrack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/auth
+      backendRefs:
+        - name: auth-service
+          port: 8000
+
+---
+# Food Service Route: /api/food → food-service:8001
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: food-route
+  namespace: nutritrack-dev
+spec:
+  parentRefs:
+    - name: nutritrack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/food
+      backendRefs:
+        - name: food-service
+          port: 8001
+
+---
+# Macro Service Route: /api/macro → macro-service:8002
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: macro-route
+  namespace: nutritrack-dev
+spec:
+  parentRefs:
+    - name: nutritrack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/macro
+      backendRefs:
+        - name: macro-service
+          port: 8002
+
+---
+# Compliance Service Route: /api/compliance → compliance-service:8003
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: compliance-route
+  namespace: nutritrack-dev
+spec:
+  parentRefs:
+    - name: nutritrack-gateway
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/compliance
+      backendRefs:
+        - name: compliance-service
+          port: 8003

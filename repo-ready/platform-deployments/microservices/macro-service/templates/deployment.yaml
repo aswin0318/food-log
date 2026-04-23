@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: macro-service
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: macro-service
+    app.kubernetes.io/name: macro-service
+    app.kubernetes.io/component: backend
+    app.kubernetes.io/part-of: nutritrack
+spec:
+  replicas: {{ .Values.macroService.replicas }}
+  selector:
+    matchLabels:
+      app: macro-service
+  template:
+    metadata:
+      labels:
+        app: macro-service
+        app.kubernetes.io/name: macro-service
+        app.kubernetes.io/component: backend
+    spec:
+      containers:
+        - name: macro-service
+          image: "{{ .Values.macroService.image.repository }}:{{ .Values.macroService.image.tag }}"
+          ports:
+            - containerPort: {{ .Values.macroService.port }}
+          envFrom:
+            - configMapRef:
+                name: macro-service-config
+            - secretRef:
+                name: macro-service-secret
+          resources:
+            requests:
+              cpu: {{ .Values.resources.requests.cpu }}
+              memory: {{ .Values.resources.requests.memory }}
+            limits:
+              cpu: {{ .Values.resources.limits.cpu }}
+              memory: {{ .Values.resources.limits.memory }}
+          readinessProbe:
+            httpGet:
+              path: /api/macro/health
+              port: {{ .Values.macroService.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/macro/health
+              port: {{ .Values.macroService.port }}
+            initialDelaySeconds: 15
+            periodSeconds: 30

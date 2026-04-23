@@ -1,0 +1,96 @@
+# =============================================================================
+# Job: PostgreSQL DB-Init
+# =============================================================================
+# Runs once (post-install / post-upgrade) to idempotently create all NutriTrack
+# service databases and their dedicated users inside the PostgreSQL StatefulSet.
+# =============================================================================
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgresql-db-init
+  namespace: {{ .Values.global.namespace }}
+  labels:
+    app: postgresql
+    app.kubernetes.io/name: postgresql
+    app.kubernetes.io/part-of: nutritrack
+    app.kubernetes.io/component: db-init
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: postgresql
+        app.kubernetes.io/name: postgresql
+        app.kubernetes.io/part-of: nutritrack
+        app.kubernetes.io/component: db-init
+    spec:
+      restartPolicy: OnFailure
+
+      # ── Wait for PostgreSQL to be reachable ─────────────────────────────
+      initContainers:
+        - name: wait-for-postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              echo "[wait] Waiting for PostgreSQL to accept connections...";
+              until pg_isready \
+                -h postgresql.{{ .Values.global.namespace }}.svc.cluster.local \
+                -p {{ .Values.postgresql.port }} \
+                -U "$POSTGRES_USER"; do
+                echo "[wait] PostgreSQL not ready yet. Retrying in 5s...";
+                sleep 5;
+              done;
+              echo "[wait] PostgreSQL is ready.";
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: POSTGRES_USER
+
+      # ── Main init container ─────────────────────────────────────────────
+      containers:
+        - name: db-init
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          command:
+            - /bin/bash
+            - /scripts/init.sh
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: POSTGRES_USER
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: POSTGRES_PASSWORD
+            - name: PGHOST
+              value: "postgresql.{{ .Values.global.namespace }}.svc.cluster.local"
+            - name: PGPORT
+              value: "{{ .Values.postgresql.port }}"
+            {{- range .Values.postgresql.dbUsers }}
+            - name: {{ .passwordKey }}
+              valueFrom:
+                secretKeyRef:
+                  name: postgresql-secret
+                  key: {{ .passwordKey }}
+            {{- end }}
+          volumeMounts:
+            - name: init-script
+              mountPath: /scripts
+
+      volumes:
+        - name: init-script
+          configMap:
+            name: postgresql-init-script
+            defaultMode: 0755
