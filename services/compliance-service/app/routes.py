@@ -43,6 +43,8 @@ async def _fetch_comparison(target_date: date, request: Request) -> dict:
             cookies=cookies,
             timeout=15.0,
         )
+        if resp.status_code == 404:
+            return None
         if resp.status_code != 200:
             raise HTTPException(
                 status_code=resp.status_code,
@@ -143,7 +145,59 @@ def _generate_alerts(
             },
         ))
 
-    return alerts
+async def _generate_time_reminders(user_id, comparison, db: AsyncSession):
+    """Generate time-based reminders for calorie intake."""
+    from datetime import datetime
+    now = datetime.now()
+    hour = now.hour
+    today = now.date()
+    
+    # Slots
+    slots = {
+        8: ("Morning Reminder", "morning_reminder"),
+        13: ("Noon Reminder", "noon_reminder"),
+        19: ("Evening Reminder", "evening_reminder"),
+        22: ("Night Summary", "night_reminder")
+    }
+    
+    if hour not in slots:
+        return
+        
+    title, alert_type = slots[hour]
+    
+    # Check if already generated today
+    from sqlalchemy import select, and_
+    result = await db.execute(
+        select(Alert).where(
+            and_(
+                Alert.user_id == user_id,
+                Alert.alert_type == alert_type,
+                Alert.date == today
+            )
+        )
+    )
+    if result.scalar_one_or_none():
+        return
+
+    target_cals = comparison.get("target", {}).get("daily_calorie_target", 2000)
+    actual_cals = comparison.get("actual", {}).get("total_calories", 0)
+    remaining = target_cals - actual_cals
+    
+    message = f"It's {title.split()[0]}! You have {max(0, remaining)} calories left to reach your goal of {target_cals} kcal."
+    if remaining < 0:
+        message = f"It's {title.split()[0]}! You've already reached your calorie goal for today."
+
+    alert = Alert(
+        user_id=user_id,
+        alert_type=alert_type,
+        severity="info",
+        title=title,
+        message=message,
+        date=today,
+        metadata_json={"remaining_calories": remaining, "current_hour": hour}
+    )
+    db.add(alert)
+
 
 
 @router.get("/check/{target_date}", response_model=ComplianceCheckResponse)
@@ -155,6 +209,15 @@ async def check_compliance(
 ):
     """Run a compliance check for a specific date."""
     comparison = await _fetch_comparison(target_date, request)
+    if not comparison:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No meals logged on {target_date.isoformat()}. Please log a meal before running analysis."
+        )
+
+    # Generate time-based reminders only for today
+    if target_date == date.today():
+        await _generate_time_reminders(current_user["user_id"], comparison, db)
 
     protein_status = comparison.get("protein_status", "ok")
     calorie_status = comparison.get("calorie_status", "ok")
@@ -317,117 +380,80 @@ async def analyze_patterns(
     db: AsyncSession = Depends(get_db),
 ):
     """Analyze multi-day patterns for compliance issues."""
-    from datetime import date as date_type
+    from datetime import date as date_type, datetime
     today = date_type.today()
+    now = datetime.now()
     patterns_found = []
     alerts_generated = 0
 
     # Fetch comparison data for each day
     daily_results = []
-    valid_days = 0
+    total_cals = 0
+    total_protein = 0
+    logged_days = 0
+    
+    missing_logs = []
+    yet_to_log = []
+
+    # Standard meal times
+    MEAL_SLOTS = {
+        "Breakfast": (6, 10),
+        "Lunch": (12, 15),
+        "Dinner": (19, 22)
+    }
+
     for i in range(days):
         day = today - timedelta(days=i)
         try:
             comparison = await _fetch_comparison(day, request)
-            meal_count = comparison.get("actual", {}).get("meal_count", 0)
-            if meal_count > 0:
-                valid_days += 1
-            daily_results.append({"date": day, "data": comparison})
+            if comparison:
+                logged_days += 1
+                total_cals += comparison["actual"]["total_calories"]
+                total_protein += comparison["actual"]["total_protein"]
+                
+                meal_count = comparison.get("actual", {}).get("meal_count", 0)
+                if meal_count == 0:
+                    missing_logs.append({"date": day.isoformat(), "status": "Missed to log whole day"})
+                elif meal_count < 3:
+                     missing_logs.append({"date": day.isoformat(), "status": f"Partial logs ({meal_count} meals)"})
+                
+                daily_results.append({"date": day, "data": comparison})
+            else:
+                missing_logs.append({"date": day.isoformat(), "status": "Missed"})
+                daily_results.append({"date": day, "data": None})
         except HTTPException:
+            missing_logs.append({"date": day.isoformat(), "status": "No data found"})
             daily_results.append({"date": day, "data": None})
 
-    if valid_days < days:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Weekly analysis requires {days} full days of logged meals. You only have {valid_days} days of data."
-        )
+    # Check "Yet to Log" for today based on current time
+    current_hour = now.hour
+    for slot_name, (start, end) in MEAL_SLOTS.items():
+        if current_hour < start:
+            yet_to_log.append(slot_name)
 
-    # Detect consecutive protein deficiency
-    consecutive_protein = 0
-    for result in daily_results:
-        if result["data"] and result["data"].get("protein_status") == "deficient":
-            consecutive_protein += 1
-        else:
-            if consecutive_protein >= settings.PATTERN_DAYS:
-                patterns_found.append({
-                    "type": "consecutive_protein_deficiency",
-                    "days": consecutive_protein,
-                    "severity": "critical",
-                    "message": (
-                        f"Protein deficiency detected for {consecutive_protein} "
-                        f"consecutive days. This may impact muscle health."
-                    ),
-                })
-            consecutive_protein = 0
+    # Calculate averages
+    averages = {
+        "avg_calories": round(total_cals / logged_days, 1) if logged_days > 0 else 0,
+        "avg_protein": round(total_protein / logged_days, 1) if logged_days > 0 else 0,
+        "logged_days": logged_days,
+        "missed_days": days - logged_days
+    }
 
-    if consecutive_protein >= settings.PATTERN_DAYS:
-        patterns_found.append({
-            "type": "consecutive_protein_deficiency",
-            "days": consecutive_protein,
-            "severity": "critical",
-            "message": (
-                f"Protein deficiency detected for {consecutive_protein} "
-                f"consecutive days. This may impact muscle health."
-            ),
-        })
-
-    # Detect consecutive calorie surplus
-    consecutive_surplus = 0
-    for result in daily_results:
-        if result["data"] and result["data"].get("calorie_status") == "surplus":
-            consecutive_surplus += 1
-        else:
-            if consecutive_surplus >= settings.PATTERN_DAYS:
-                patterns_found.append({
-                    "type": "consecutive_calorie_surplus",
-                    "days": consecutive_surplus,
-                    "severity": "warning",
-                    "message": (
-                        f"Calorie surplus detected for {consecutive_surplus} "
-                        f"consecutive days. Consider adjusting intake."
-                    ),
-                })
-            consecutive_surplus = 0
-
-    if consecutive_surplus >= settings.PATTERN_DAYS:
-        patterns_found.append({
-            "type": "consecutive_calorie_surplus",
-            "days": consecutive_surplus,
-            "severity": "warning",
-            "message": (
-                f"Calorie surplus detected for {consecutive_surplus} "
-                f"consecutive days. Consider adjusting intake."
-            ),
-        })
-
-    # Detect consecutive calorie deficit
-    consecutive_deficit = 0
-    for result in daily_results:
-        if result["data"] and result["data"].get("calorie_status") == "deficit":
-            consecutive_deficit += 1
-        else:
-            if consecutive_deficit >= settings.PATTERN_DAYS:
-                patterns_found.append({
-                    "type": "consecutive_calorie_deficit",
-                    "days": consecutive_deficit,
-                    "severity": "critical",
-                    "message": (
-                        f"Calorie deficit detected for {consecutive_deficit} "
-                        f"consecutive days. This may be unsafe."
-                    ),
-                })
-            consecutive_deficit = 0
-
-    if consecutive_deficit >= settings.PATTERN_DAYS:
-        patterns_found.append({
-            "type": "consecutive_calorie_deficit",
-            "days": consecutive_deficit,
-            "severity": "critical",
-            "message": (
-                f"Calorie deficit detected for {consecutive_deficit} "
-                f"consecutive days. This may be unsafe."
-            ),
-        })
+    # Detect trends
+    if logged_days >= 3:
+        consecutive_protein = 0
+        for result in daily_results:
+            if result["data"] and result["data"].get("protein_status") == "deficient":
+                consecutive_protein += 1
+            else:
+                if consecutive_protein >= 3:
+                    patterns_found.append({
+                        "type": "protein_deficiency_trend",
+                        "days": consecutive_protein,
+                        "severity": "critical",
+                        "message": f"Protein targets missed for {consecutive_protein} days."
+                    })
+                consecutive_protein = 0
 
     # Generate pattern alerts
     for pattern in patterns_found:
@@ -435,7 +461,7 @@ async def analyze_patterns(
             user_id=current_user["user_id"],
             alert_type="pattern_detected",
             severity=pattern["severity"],
-            title=f"Pattern: {pattern['type'].replace('_', ' ').title()}",
+            title=f"Trend: {pattern['type'].replace('_', ' ').title()}",
             message=pattern["message"],
             date=today,
             metadata_json=pattern,
@@ -447,7 +473,10 @@ async def analyze_patterns(
         analyzed_days=days,
         patterns_found=patterns_found,
         alerts_generated=alerts_generated,
-        message=f"Analyzed {days} days. Found {len(patterns_found)} patterns.",
+        message=f"Analyzed {days} days. Logged {logged_days} days.",
+        weekly_averages=averages,
+        missing_logs=missing_logs,
+        yet_to_log=yet_to_log
     )
 
 

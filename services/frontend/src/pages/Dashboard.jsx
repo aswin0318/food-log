@@ -103,6 +103,55 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Reports & Analysis */}
+      <div className="grid-2 mb-6">
+        <div className="card">
+          <h3 className="mb-4">Daily Analysis</h3>
+          <p className="text-sm text-muted mb-4">Run a deep check of today's goals and meal frequency.</p>
+          <button className="btn btn-primary btn-sm" onClick={async () => {
+             setLoading(true)
+             try {
+               await complianceApi.checkCompliance(today())
+               const al = await complianceApi.getAlerts(5)
+               setAlerts(al)
+               alert("Daily analysis complete! Check your alerts.")
+             } catch (e) {
+               alert("Daily analysis failed: " + (e.response?.data?.detail || e.message))
+             } finally {
+               setLoading(false)
+             }
+          }}>Run Daily Check</button>
+        </div>
+
+        <div className="card">
+          <h3 className="mb-4">Weekly Report</h3>
+          <p className="text-sm text-muted mb-4">Analyze trends and identify missing logs.</p>
+          <button className="btn btn-outline btn-sm" onClick={async () => {
+             setLoading(true)
+             try {
+               const res = await complianceApi.analyzePatterns(7)
+               const avgText = res.weekly_averages ? 
+                 `Averages: ${res.weekly_averages.avg_calories} kcal, ${res.weekly_averages.avg_protein}g protein\n` : ''
+               
+               const missingText = res.missing_logs?.length > 0 ? 
+                 `Missing Logs:\n${res.missing_logs.map(m => `- ${m.date}: ${m.status}`).join('\n')}\n` : 'No missing logs found!\n'
+               
+               const yetToLogText = res.yet_to_log?.length > 0 ?
+                 `Yet to log today: ${res.yet_to_log.join(', ')}\n` : ''
+
+               const patternText = res.patterns_found?.length > 0 ?
+                 `Trends Detected:\n${res.patterns_found.map(p => `- ${p.message}`).join('\n')}` : 'No unusual trends detected.'
+
+               alert(`📊 WEEKLY ANALYSIS REPORT\n\n${avgText}\n${missingText}\n${yetToLogText}\n${patternText}`)
+             } catch (e) {
+               alert(e.response?.data?.detail || "Weekly analysis failed.")
+             } finally {
+               setLoading(false)
+             }
+          }}>Generate Weekly Report</button>
+        </div>
+      </div>
+
       {/* Recent Alerts */}
       {alerts && alerts.alerts.length > 0 && (
         <div className="card">

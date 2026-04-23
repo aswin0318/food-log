@@ -47,6 +47,9 @@ class PatternAnalysisResponse(BaseModel):
     patterns_found: list[dict]
     alerts_generated: int
     message: str
+    weekly_averages: dict | None = None
+    missing_logs: list[dict] | None = None
+    yet_to_log: list[str] | None = None
 
 
 class MessageResponse(BaseModel):
