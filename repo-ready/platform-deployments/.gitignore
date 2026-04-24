@@ -2,4 +2,4 @@ auth-service-secret.yaml
 compliance-service-secret.yaml
 food-service-secret.yaml
 macro-service-secret.yaml
-postgres-secret.yaml
+postgresql-secret.yaml
